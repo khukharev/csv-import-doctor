@@ -5,8 +5,9 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-APP_VERSION = "0.1"
+APP_VERSION = "0.2"
 PROJECT_ROOT = Path(__file__).resolve().parent
+PROFILE_PATH = PROJECT_ROOT / "profile.json"
 DEFAULT_NAME = "CSV Import Doctor"
 DEFAULT_AUTHOR = "Student"
 ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR"}
@@ -22,11 +23,11 @@ class Settings:
     def __post_init__(self) -> None:
         for key, value in (("APP_NAME", self.app_name), ("APP_AUTHOR", self.app_author)):
             if not isinstance(value, str) or not value.strip() or len(value) > 128:
-                raise ValueError(f"{key}: non empty string no longer than 128 characters")
+                raise ValueError(f"{key}: must be a non-empty string of at most 128 characters")
             if any(ord(char) < 32 or ord(char) == 127 for char in value):
-                raise ValueError(f"{key}: special symbols are prohibited")
+                raise ValueError(f"{key}: control characters are not allowed")
         if self.log_level not in ALLOWED_LOG_LEVELS:
-            raise ValueError("APP_LOG_LEVEL: DEBUG, INFO, WARNING, ERROR")
+            raise ValueError("APP_LOG_LEVEL: allowed values are DEBUG, INFO, WARNING, ERROR")
 
 
 def load_settings(
@@ -35,6 +36,7 @@ def load_settings(
     env_file: Path | None = None,
     read_env_file: bool = True,
 ) -> Settings:
+    """Build settings. Priority: process environment, then .env, then defaults."""
     file_values: Mapping[str, str | None] = {}
     if read_env_file:
         path = PROJECT_ROOT / ".env" if env_file is None else Path(env_file)
@@ -49,7 +51,7 @@ def load_settings(
         else:
             result = default
         if result is None:
-            raise ValueError(f"{key}: Value doesn't exist")
+            raise ValueError(f"{key}: value is not set")
         return result
 
     return Settings(

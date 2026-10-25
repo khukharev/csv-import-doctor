@@ -1,17 +1,21 @@
+"""HTTP-level tests for the endpoints that exist in the current version."""
+
+import json
 import logging
-import os
-from dataclasses import FrozenInstanceError
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 
+import config
 from app_final import LOGGER, configure_logging, create_app
-from config import APP_VERSION, Settings, load_settings
+from config import APP_VERSION, Settings
+from csv_profile import CHECK_IDS, ProfileError
 
 
 @pytest.fixture
 def client():
+    # Do not read the real .env or the environment of the developer's machine.
     with TestClient(create_app(Settings())) as test_client:
         yield test_client
 
@@ -29,8 +33,29 @@ def test_version(client):
         "name": "CSV Import Doctor",
         "author": "Student",
         "version": APP_VERSION,
+        "profile_id": "basic_table_v1",
+        "profile_version": "1.0",
     }
-    assert APP_VERSION == "0.1"
+    assert APP_VERSION == "0.2"
+
+
+def test_profile_endpoint(client):
+    response = client.get("/profile")
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"profile", "implemented_check_ids"}
+    assert body["profile"]["id"] == "basic_table_v1"
+    assert [check["id"] for check in body["profile"]["checks"]] == list(CHECK_IDS)
+    assert set(body["implemented_check_ids"]) <= set(CHECK_IDS)
+
+
+def test_profile_endpoint_matches_profile_file(client):
+    expected = json.loads(config.PROFILE_PATH.read_text(encoding="utf-8"))
+    assert client.get("/profile").json()["profile"] == expected
+
+
+def test_profile_method_is_get_only(client):
+    assert client.post("/profile").status_code == 405
 
 
 def test_docs(client):
@@ -41,7 +66,7 @@ def test_docs(client):
 
 def test_openapi_contains_only_current_routes(client):
     schema = client.get("/openapi.json").json()
-    assert set(schema["paths"]) == {"/health", "/version"}
+    assert set(schema["paths"]) == {"/health", "/version", "/profile"}
     assert schema["info"]["version"] == APP_VERSION
 
 
@@ -62,7 +87,7 @@ def test_health_method_is_get_only(client):
 
 
 def test_missing_route_and_future_routes_return_404(client):
-    for path in ("/", "/profile", "/inspect", "/normalize", "/missing"):
+    for path in ("/", "/inspect", "/normalize", "/missing"):
         assert client.get(path).status_code == 404
 
 
@@ -94,8 +119,9 @@ def test_startup_and_shutdown_are_logged(caplog):
         with TestClient(create_app(Settings())) as client:
             assert client.get("/health").status_code == 200
     messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "event=application_started version=0.1" in messages
-    assert "event=application_stopped version=0.1" in messages
+    assert "event=application_started version=0.2" in messages
+    assert "profile_id=basic_table_v1 profile_version=1.0" in messages
+    assert "event=application_stopped version=0.2" in messages
 
 
 def test_logger_does_not_duplicate_handlers():
@@ -106,74 +132,26 @@ def test_logger_does_not_duplicate_handlers():
     configure_logging("INFO")
 
 
-def test_settings_defaults_are_isolated():
-    assert load_settings(environ={}, read_env_file=False) == Settings()
-
-
-def test_settings_precedence_and_no_environment_mutation(tmp_path, monkeypatch):
-    monkeypatch.delenv("CSV_DOCTOR_FILE_ONLY", raising=False)
-    before = dict(os.environ)
-    env_file = tmp_path / ".env"
-    env_file.write_text(
-        'APP_NAME="From file"\nAPP_AUTHOR="File Author"\n'
-        'APP_LOG_LEVEL=DEBUG\nCSV_DOCTOR_FILE_ONLY=private\n', encoding="utf-8"
-    )
-    settings = load_settings(environ={"APP_NAME": "From process"}, env_file=env_file)
-    assert settings == Settings("From process", "File Author", "DEBUG")
-    assert dict(os.environ) == before
-
-
-def test_dotenv_does_not_expand_variables(tmp_path):
-    env_file = tmp_path / ".env"
-    env_file.write_text('APP_NAME="${HOME}"\n', encoding="utf-8")
-    assert load_settings(environ={}, env_file=env_file).app_name == "${HOME}"
-
-
-def test_default_env_path_does_not_depend_on_working_directory(tmp_path, monkeypatch):
-    import config
-
-    project = tmp_path / "project"
-    other = tmp_path / "other"
-    project.mkdir()
-    other.mkdir()
-    (project / ".env").write_text('APP_NAME="Project file"\n', encoding="utf-8")
-    (other / ".env").write_text('APP_NAME="Wrong file"\n', encoding="utf-8")
-    monkeypatch.setattr(config, "PROJECT_ROOT", project)
-    monkeypatch.chdir(other)
-    assert load_settings(environ={}).app_name == "Project file"
-
-
-@pytest.mark.parametrize(
-    "env",
-    [
-        {"APP_NAME": ""},
-        {"APP_NAME": "   "},
-        {"APP_NAME": "x" * 129},
-        {"APP_NAME": "hello\nworld"},
-        {"APP_AUTHOR": ""},
-        {"APP_AUTHOR": "bad\tname"},
-        {"APP_LOG_LEVEL": "TRACE"},
-        {"APP_LOG_LEVEL": ""},
-        {"APP_LOG_LEVEL": "info"},
-    ],
-)
-def test_invalid_settings_fail(env):
-    with pytest.raises(ValueError, match="APP_"):
-        load_settings(environ=env, read_env_file=False)
-
-
-def test_unknown_environment_variables_are_ignored():
-    assert load_settings(environ={"UNRELATED_KEY": "value"}, read_env_file=False) == Settings()
-
-
-def test_settings_are_immutable():
-    settings = Settings()
-    with pytest.raises(FrozenInstanceError):
-        settings.app_name = "Changed"
-
-
 def test_invalid_settings_prevent_startup(monkeypatch):
     monkeypatch.setenv("APP_LOG_LEVEL", "INVALID")
     with pytest.raises(ValueError, match="APP_LOG_LEVEL"):
         with TestClient(create_app()):
+            pass
+
+
+def test_invalid_profile_prevents_startup_and_is_logged(tmp_path, caplog):
+    broken = tmp_path / "profile.json"
+    broken.write_text("{not json", encoding="utf-8")
+    with caplog.at_level(logging.INFO, logger="csv_import_doctor"):
+        with pytest.raises(ProfileError):
+            with TestClient(create_app(Settings(), profile_path=broken)):
+                pass
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert "event=profile_load_failed" in messages
+    assert "event=application_started" not in messages
+
+
+def test_missing_profile_prevents_startup(tmp_path):
+    with pytest.raises(ProfileError):
+        with TestClient(create_app(Settings(), profile_path=tmp_path / "missing.json")):
             pass

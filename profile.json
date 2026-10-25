@@ -1,0 +1,93 @@
+{
+  "id": "basic_table_v1",
+  "version": "1.0",
+  "title": "Basic table import profile",
+  "description": "Rules for a rectangular CSV table whose first record is the header. The service reports problems and, on request, writes a normalized copy. It never deletes rows or guesses values.",
+  "defaults": {
+    "encoding": "utf-8",
+    "delimiter": "comma"
+  },
+  "allowed_encodings": [
+    "utf-8",
+    "cp1251"
+  ],
+  "allowed_delimiters": [
+    "comma",
+    "semicolon",
+    "tab"
+  ],
+  "trim_characters": [
+    "U+0020",
+    "U+0009"
+  ],
+  "normalization": {
+    "allowed_changes": [
+      "trim_header_edges",
+      "trim_cell_edges",
+      "rewrite_as_utf8_comma_lf"
+    ],
+    "forbidden_changes": [
+      "delete_rows",
+      "delete_columns",
+      "reorder_columns",
+      "guess_values",
+      "convert_types"
+    ]
+  },
+  "output": {
+    "encoding": "utf-8",
+    "delimiter": "comma",
+    "line_terminator": "lf"
+  },
+  "checks": [
+    {
+      "id": "C01",
+      "title": "Text and encoding",
+      "description": "The file must decode strictly with the selected encoding and contain no control characters other than TAB, LF and CR.",
+      "blocks_normalization": true,
+      "requires_id_column": false
+    },
+    {
+      "id": "C02",
+      "title": "Table structure",
+      "description": "The file must parse as CSV and every record must have the same number of fields as the header.",
+      "blocks_normalization": true,
+      "requires_id_column": false
+    },
+    {
+      "id": "C03",
+      "title": "Headers",
+      "description": "Headers must not be empty, must be unique after trimming and must be at most 128 characters long.",
+      "blocks_normalization": true,
+      "requires_id_column": false
+    },
+    {
+      "id": "C04",
+      "title": "Edge whitespace",
+      "description": "Reports spaces and tabs at the start or end of headers and cells; normalization removes them. A non-breaking space (U+00A0) at an edge is reported separately and kept by default.",
+      "blocks_normalization": false,
+      "requires_id_column": false
+    },
+    {
+      "id": "C05",
+      "title": "Declared identifier column",
+      "description": "When an identifier column is declared, it must exist and have no empty or repeated values. Values are compared exactly after trimming, so 00123 and 123 are different.",
+      "blocks_normalization": true,
+      "requires_id_column": true
+    },
+    {
+      "id": "C06",
+      "title": "Duplicate rows",
+      "description": "Reports data records that are identical in every field to an earlier record. Rows are never removed.",
+      "blocks_normalization": false,
+      "requires_id_column": false
+    },
+    {
+      "id": "C07",
+      "title": "Numeric identifier risks",
+      "description": "Reports identifiers with leading zeros or more than 15 digits, which spreadsheet programs may damage. Values are kept as text.",
+      "blocks_normalization": false,
+      "requires_id_column": true
+    }
+  ]
+}

@@ -1,18 +1,18 @@
-# Local env
+# Environments and local configuration
 .venv/
 venv/
 .env
 .env.*
 !.env.example
 
-# Python/test caches
+# Python and test caches
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Data, logs etc
+# Real data, results, logs and macOS files
 local_data/
 downloads/
 *.zip
@@ -20,4 +20,4 @@ downloads/
 .DS_Store
 __MACOSX/
 
-# *.csv / *.json are intentionally not ignored as test samples are to be added
+# *.csv and *.json are NOT ignored: sample files and the profile belong in Git.
