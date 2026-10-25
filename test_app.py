@@ -36,7 +36,7 @@ def test_version(client):
         "profile_id": "basic_table_v1",
         "profile_version": "1.0",
     }
-    assert APP_VERSION == "0.2"
+    assert APP_VERSION == "0.3"
 
 
 def test_profile_endpoint(client):
@@ -119,9 +119,9 @@ def test_startup_and_shutdown_are_logged(caplog):
         with TestClient(create_app(Settings())) as client:
             assert client.get("/health").status_code == 200
     messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "event=application_started version=0.2" in messages
+    assert "event=application_started version=0.3" in messages
     assert "profile_id=basic_table_v1 profile_version=1.0" in messages
-    assert "event=application_stopped version=0.2" in messages
+    assert "event=application_stopped version=0.3" in messages
 
 
 def test_logger_does_not_duplicate_handlers():
@@ -154,4 +154,15 @@ def test_invalid_profile_prevents_startup_and_is_logged(tmp_path, caplog):
 def test_missing_profile_prevents_startup(tmp_path):
     with pytest.raises(ProfileError):
         with TestClient(create_app(Settings(), profile_path=tmp_path / "missing.json")):
+            pass
+
+
+def test_c01_is_available_but_structure_checks_are_not_yet_advertised(client):
+    assert client.get("/profile").json()["implemented_check_ids"] == ["C01"]
+
+
+def test_invalid_csv_limits_prevent_startup(monkeypatch):
+    monkeypatch.setenv("CSV_MAX_BYTES", "0")
+    with pytest.raises(ValueError, match="CSV_MAX_BYTES"):
+        with TestClient(create_app()):
             pass

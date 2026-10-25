@@ -1,0 +1,2 @@
+# CSV Import Doctor
+The final service will check CSV files before import and create a normalized copy with a change log. The current version is a development milestone, not a finished import validator.

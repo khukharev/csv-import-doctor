@@ -9,7 +9,8 @@ PROFILE_ID = "basic_table_v1"
 CHECK_IDS = ("C01", "C02", "C03", "C04", "C05", "C06", "C07")
 SUPPORTED_ENCODINGS = ("utf-8", "cp1251")
 SUPPORTED_DELIMITERS = ("comma", "semicolon", "tab")
-IMPLEMENTED_CHECK_IDS: tuple[str, ...] = ()
+# C01 is available in csv_core; HTTP inspection is a later stage.
+IMPLEMENTED_CHECK_IDS: tuple[str, ...] = ("C01",)
 
 _TOP_LEVEL_KEYS = frozenset(
     {

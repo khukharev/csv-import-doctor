@@ -64,8 +64,9 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
         title="CSV Import Doctor",
         version=APP_VERSION,
         description=(
-            "Early development: the service exposes its CSV profile. "
-            "CSV inspection and normalization are not implemented yet."
+            "Development version 0.3: CSV decoding and parsing are available "
+            "in the local csv_core module and CLI. HTTP inspection and "
+            "normalization are not implemented yet."
         ),
         lifespan=lifespan,
         redoc_url=None,
@@ -119,7 +120,7 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
             "profile_version": profile["version"],
         }
 
-    @application.get("/profile", summary="Describe the active CSV profile and its checks")
+    @application.get("/profile", summary="Profile and checks implemented in the core (not HTTP inspection)")
     def get_profile(request: Request) -> dict[str, Any]:
         return {
             "profile": request.app.state.profile,

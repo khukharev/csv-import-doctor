@@ -65,10 +65,84 @@ def test_invalid_settings_fail(env):
 
 
 def test_unknown_environment_variables_are_ignored():
-    assert load_settings(environ={"UNRELATED_KEY": "value"}, read_env_file=False) == Settings()
+    assert (
+        load_settings(environ={"UNRELATED_KEY": "value"}, read_env_file=False)
+        == Settings()
+    )
 
 
 def test_settings_are_immutable():
     settings = Settings()
     with pytest.raises(FrozenInstanceError):
         settings.app_name = "Changed"
+
+
+def test_csv_limit_defaults():
+    settings = load_settings(environ={}, read_env_file=False)
+    assert settings.csv_max_bytes == 2_097_152
+    assert settings.csv_max_rows == 10_000
+
+
+def test_csv_limits_environment_overrides_file(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("CSV_MAX_BYTES=200\nCSV_MAX_ROWS=4\n", encoding="utf-8")
+    settings = load_settings(environ={"CSV_MAX_BYTES": "300"}, env_file=env_file)
+    assert settings.csv_max_bytes == 300
+    assert settings.csv_max_rows == 4
+
+
+@pytest.mark.parametrize(
+    "key,maximum", [("CSV_MAX_BYTES", 8_388_608), ("CSV_MAX_ROWS", 50_000)]
+)
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "empty",
+        "zero",
+        "negative",
+        "float",
+        "space",
+        "plus",
+        "letters",
+        "unicode-digit",
+        "unset",
+        "too-large",
+    ],
+)
+def test_invalid_csv_limits_fail(key, maximum, kind):
+    values = {
+        "empty": "",
+        "zero": "0",
+        "negative": "-1",
+        "float": "1.5",
+        "space": " 1",
+        "plus": "+1",
+        "letters": "abc",
+        "unicode-digit": "\u0661",
+        "unset": None,
+        "too-large": str(maximum + 1),
+    }
+    with pytest.raises(ValueError, match=key):
+        load_settings(environ={key: values[kind]}, read_env_file=False)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"csv_max_bytes": True},
+        {"csv_max_rows": False},
+        {"csv_max_bytes": 0},
+        {"csv_max_rows": 1.0},
+    ],
+)
+def test_direct_settings_reject_invalid_limit_types(kwargs):
+    with pytest.raises(ValueError, match="CSV_"):
+        Settings(**kwargs)
+
+
+def test_csv_limit_upper_boundaries():
+    settings = load_settings(
+        environ={"CSV_MAX_BYTES": "8388608", "CSV_MAX_ROWS": "50000"},
+        read_env_file=False,
+    )
+    assert (settings.csv_max_bytes, settings.csv_max_rows) == (8_388_608, 50_000)
