@@ -1,0 +1,23 @@
+# Local env
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Python/test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data, logs etc
+local_data/
+downloads/
+*.zip
+*.log
+.DS_Store
+__MACOSX/
+
+# *.csv / *.json are intentionally not ignored as test samples are to be added
