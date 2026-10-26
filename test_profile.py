@@ -104,3 +104,11 @@ def test_invalid_profiles_are_rejected(mutate):
 def test_profile_path_constant_points_to_project_file():
     assert config.PROFILE_PATH.name == "profile.json"
     assert config.PROFILE_PATH.parent == config.PROJECT_ROOT
+
+
+@pytest.mark.parametrize("characters", [["U+000A"], ["U+0020", "U+0009", "U+00A0"]])
+def test_profile_cannot_enable_unsafe_or_hidden_trim(characters):
+    profile = copy.deepcopy(load_profile())
+    profile["trim_characters"] = characters
+    with pytest.raises(ProfileError, match="trim_characters"):
+        validate_profile(profile)

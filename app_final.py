@@ -64,8 +64,8 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
         title="CSV Import Doctor",
         version=APP_VERSION,
         description=(
-            "Development version 0.3: CSV decoding and parsing are available "
-            "in the local csv_core module and CLI. HTTP inspection and "
+            "Development version 0.4: all seven checks are available "
+            "in the local checks module and CLI. HTTP inspection and "
             "normalization are not implemented yet."
         ),
         lifespan=lifespan,

@@ -36,7 +36,7 @@ def test_version(client):
         "profile_id": "basic_table_v1",
         "profile_version": "1.0",
     }
-    assert APP_VERSION == "0.3"
+    assert APP_VERSION == "0.4"
 
 
 def test_profile_endpoint(client):
@@ -119,9 +119,9 @@ def test_startup_and_shutdown_are_logged(caplog):
         with TestClient(create_app(Settings())) as client:
             assert client.get("/health").status_code == 200
     messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "event=application_started version=0.3" in messages
+    assert "event=application_started version=0.4" in messages
     assert "profile_id=basic_table_v1 profile_version=1.0" in messages
-    assert "event=application_stopped version=0.3" in messages
+    assert "event=application_stopped version=0.4" in messages
 
 
 def test_logger_does_not_duplicate_handlers():
@@ -157,8 +157,8 @@ def test_missing_profile_prevents_startup(tmp_path):
             pass
 
 
-def test_c01_is_available_but_structure_checks_are_not_yet_advertised(client):
-    assert client.get("/profile").json()["implemented_check_ids"] == ["C01"]
+def test_all_checks_are_available_in_local_core(client):
+    assert client.get("/profile").json()["implemented_check_ids"] == list(CHECK_IDS)
 
 
 def test_invalid_csv_limits_prevent_startup(monkeypatch):

@@ -1,38 +1,41 @@
 # Artificial CSV fixtures
 
 All files are deliberately constructed test inputs, not real exports or datasets.
-Each file has an exact expected behavior. Their bytes are part of the tests. Do not open/save the CP1251 example as UTF-8.
+The original 11 fixture files are unchanged from 0.3. Do not resave the CP1251
+example as UTF-8 or remove the intentional BOM in utf8_bom.csv.
 
-Default parsing is UTF-8 with a comma and a first-record header.
+Expected results below use **`--id-column id`**, default NBSP preservation and
+UTF-8/comma, except the CP1251 example. Counts include all warnings, including C07.
 
-| File | Data records | Header fields | Behavior in 0.3 |
-|---|---:|---:|---|
-| `valid.csv` | 3 | 3 | Parse; IDs `00123`, `123`, `1234567890123456` remain strings; quoted comma/quotes preserved |
-| `needs_trim.csv` | 2 | 3 | Parse unchanged; exactly 4 values would change under future space/TAB edge trim (1 header, 3 cells) |
-| `duplicate_id.csv` | 2 | 2 | Parse; ID uniqueness is not validated yet |
-| `duplicate_rows.csv` | 2 | 2 | Parse; both identical rows remain |
-| `bad_width.csv` | 3 | 2 | Parse; data widths are 2, 1, 3; width validation is later C02 |
-| `blank_record.csv` | 3 | 2 | Parse; middle data record is an empty tuple at physical line 3 |
-| `multiline.csv` | 2 | 2 | Parse; first data record spans physical lines 2..3, next is line 4 |
-| `utf8_bom.csv` | 1 | 2 | Parse; leading UTF-8 BOM recorded and removed from header text |
-| `nbsp_edges.csv` | 1 | 2 | Parse; NBSP around Alice preserved |
-| `cp1251_semicolon.csv` | 2 | 2 | Requires `--encoding cp1251 --delimiter semicolon`; Russian city names |
-| `broken_quotes.csv` | n/a | n/a | `CSV_PARSE_ERROR` (unclosed quoted data field) |
+| File | Data rows | Columns | Errors | Warnings | Trim changes | CLI exit |
+|---|---:|---:|---:|---:|---:|---:|
+| valid.csv | 3 | 3 | 0 | 2 | 0 | 0 |
+| needs_trim.csv | 2 | 3 | 0 | 6 | 4 | 0 |
+| duplicate_id.csv | 2 | 2 | 1 | 2 | 0 | 1 |
+| duplicate_rows.csv | 2 | 2 | 1 | 3 | 0 | 1 |
+| bad_width.csv | 3 | 2 | 2 | 0 | 0 | 1 |
+| blank_record.csv | 3 | 2 | 1 | 0 | 0 | 1 |
+| multiline.csv | 2 | 2 | 0 | 2 | 0 | 0 |
+| utf8_bom.csv | 1 | 2 | 0 | 1 | 0 | 0 |
+| nbsp_edges.csv | 1 | 2 | 0 | 1 | 0 | 0 |
+| cp1251_semicolon.csv | 2 | 2 | 0 | 2 | 0 | 0 |
+| broken_quotes.csv | n/a | n/a | no report: CSV_PARSE_ERROR | n/a | n/a | 2 |
 
-Commands:
+The file named valid.csv is **not warning-free**: leading-zero and long numeric
+IDs are intentionally preserved as text and reported by C07.
 
 ```bash
-python -m csv_core examples/valid.csv
-python -m csv_core examples/cp1251_semicolon.csv --encoding cp1251 --delimiter semicolon
-python -m csv_core examples/multiline.csv
-python -m csv_core examples/needs_trim.csv
-python -m csv_core examples/bad_width.csv
-python -m csv_core examples/broken_quotes.csv
+python -m checks examples/valid.csv --id-column id
+python -m checks examples/needs_trim.csv --id-column id
+python -m checks examples/duplicate_id.csv --id-column id
+python -m checks examples/duplicate_rows.csv --id-column id
+python -m checks examples/bad_width.csv --id-column id
+python -m checks examples/cp1251_semicolon.csv --encoding cp1251 --delimiter semicolon --id-column id
 ```
 
-The last command exits 2 by design. Others above should exit 0 under default
-limits. `parsed: true` never means `validated: true` in this development stage.
-Read tests in `test_core.py` for exact byte/value assertions.
+Without `--id-column`, C05/C07 are skipped; duplicate_rows.csv is valid with one
+C06 warning and exit 0. With `CSV_TRIM_NBSP=true`, nbsp_edges.csv has one planned
+cell change and one additional C04 warning. No fixture is changed on disk.
 
-Git attributes preserve the CP1251 file as bytes (`-text`); other CSV fixtures use
-LF line endings. The UTF-8 BOM is intentional and must not be removed by an editor.
+The parser-only CLI remains available. `python -m csv_core examples/bad_width.csv`
+still exits 0: parsing is not validation. Use `python -m checks` for checks.

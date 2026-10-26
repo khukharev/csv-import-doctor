@@ -9,8 +9,8 @@ PROFILE_ID = "basic_table_v1"
 CHECK_IDS = ("C01", "C02", "C03", "C04", "C05", "C06", "C07")
 SUPPORTED_ENCODINGS = ("utf-8", "cp1251")
 SUPPORTED_DELIMITERS = ("comma", "semicolon", "tab")
-# C01 is available in csv_core; HTTP inspection is a later stage.
-IMPLEMENTED_CHECK_IDS: tuple[str, ...] = ("C01",)
+# All checks are available in the local core. HTTP inspection is a later stage.
+IMPLEMENTED_CHECK_IDS: tuple[str, ...] = CHECK_IDS
 
 _TOP_LEVEL_KEYS = frozenset(
     {
@@ -101,6 +101,9 @@ def validate_profile(data: Any) -> dict[str, Any]:
     for index, code_point in enumerate(_text_list(profile["trim_characters"], "trim_characters")):
         if not _CODE_POINT.fullmatch(code_point):
             _fail(f"trim_characters[{index}]", "must look like U+0020")
+
+    if profile["trim_characters"] != ["U+0020", "U+0009"]:
+        _fail("trim_characters", "this profile supports only SPACE and TAB; use CSV_TRIM_NBSP for NBSP")
 
     normalization = _object(profile["normalization"], "normalization", _NORMALIZATION_KEYS)
     allowed = _text_list(normalization["allowed_changes"], "normalization.allowed_changes")

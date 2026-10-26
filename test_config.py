@@ -146,3 +146,33 @@ def test_csv_limit_upper_boundaries():
         read_env_file=False,
     )
     assert (settings.csv_max_bytes, settings.csv_max_rows) == (8_388_608, 50_000)
+
+
+def test_nbsp_default_is_false():
+    assert load_settings(environ={}, read_env_file=False).csv_trim_nbsp is False
+
+
+@pytest.mark.parametrize("text,expected", [("true", True), ("false", False)])
+def test_nbsp_env_values(text, expected):
+    assert load_settings(environ={"CSV_TRIM_NBSP": text}, read_env_file=False).csv_trim_nbsp is expected
+
+
+@pytest.mark.parametrize("value", ["", "TRUE", "False", "yes", "0", "1", " true", None])
+def test_nbsp_invalid_env_fails(value):
+    with pytest.raises(ValueError, match="CSV_TRIM_NBSP"):
+        load_settings(environ={"CSV_TRIM_NBSP": value}, read_env_file=False)
+
+
+@pytest.mark.parametrize("value", ["false", "true", 0, 1, None])
+def test_nbsp_direct_type_is_strict(value):
+    with pytest.raises(ValueError, match="CSV_TRIM_NBSP"):
+        Settings(csv_trim_nbsp=value)
+
+
+def test_nbsp_process_overrides_dotenv_without_modifying_environment(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("CSV_TRIM_NBSP=true\n", encoding="utf-8")
+    before = dict(os.environ)
+    assert load_settings(environ={}, env_file=env_file).csv_trim_nbsp is True
+    assert load_settings(environ={"CSV_TRIM_NBSP": "false"}, env_file=env_file).csv_trim_nbsp is False
+    assert dict(os.environ) == before
