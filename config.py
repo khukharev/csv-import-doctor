@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-APP_VERSION = "0.4"
+APP_VERSION = "0.5"
 REPORT_SCHEMA_VERSION = "1.0"
 MAX_HEADER_LENGTH = 128
 MAX_ISSUE_DETAILS = 1_000
