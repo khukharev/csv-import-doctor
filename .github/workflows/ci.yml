@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    name: Test and package source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Record the checked-out commit
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "COMMIT_SHA=$sha" >> "$GITHUB_ENV"
+          echo "Commit under test: $sha"
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Show Python and pip versions
+        run: |
+          python --version
+          python -m pip --version
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Check dependency consistency
+        run: python -m pip check
+
+      - name: Run the full test suite (warnings are errors)
+        run: python -m pytest -v -W error
+
+      - name: Verify tracked sources are unchanged
+        run: |
+          test "$(git rev-parse HEAD)" = "$COMMIT_SHA"
+          git diff --exit-code HEAD --
+          git diff --cached --exit-code --
+
+      - name: Build source archive of the commit
+        run: |
+          archive="$RUNNER_TEMP/csv-import-doctor-${COMMIT_SHA::12}.zip"
+          git archive --format=zip --prefix=csv-import-doctor/ --output="$archive" "$COMMIT_SHA"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Verify the archive matches the commit
+        run: |
+          python - <<'PY'
+          import os, stat, subprocess, zipfile
+
+          sha, path, prefix = os.environ["COMMIT_SHA"], os.environ["ARCHIVE"], "csv-import-doctor/"
+          tree = subprocess.run(
+              ["git", "ls-tree", "-r", "-z", sha], check=True, capture_output=True,
+          ).stdout.decode().split("\0")
+          expected = {}
+          for entry in filter(None, tree):
+              meta, name = entry.split("\t", 1)
+              mode, kind, blob = meta.split()
+              assert kind == "blob", f"unsupported tree entry: {name}"
+              expected[name] = (mode, blob)
+          with zipfile.ZipFile(path) as archive:
+              assert archive.testzip() is None, "corrupted member"
+              files = {i.filename[len(prefix):]: i for i in archive.infolist() if not i.is_dir()}
+              assert set(files) == set(expected), sorted(set(files) ^ set(expected))
+              for name, (mode, blob) in expected.items():
+                  data = subprocess.run(
+                      ["git", "cat-file", "blob", blob], check=True, capture_output=True,
+                  ).stdout
+                  assert archive.read(files[name]) == data, f"content differs: {name}"
+                  executable = bool((files[name].external_attr >> 16) & stat.S_IXUSR)
+                  assert executable == (mode == "100755"), f"mode differs: {name}"
+          for required in (".github/workflows/ci.yml", ".env.example", ".gitignore",
+                           ".gitattributes", "run.sh", "requirements.txt"):
+              assert required in files, f"missing: {required}"
+          print(f"Archive OK: {len(files)} files from {sha}")
+          PY
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.ARCHIVE }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 30

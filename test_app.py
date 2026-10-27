@@ -36,7 +36,7 @@ def test_version(client):
         "profile_id": "basic_table_v1",
         "profile_version": "1.0",
     }
-    assert APP_VERSION == "0.6"
+    assert APP_VERSION == "0.7"
 
 
 def test_profile_endpoint(client):
@@ -120,9 +120,9 @@ def test_startup_and_shutdown_are_logged(caplog):
         with TestClient(create_app(Settings())) as client:
             assert client.get("/health").status_code == 200
     messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "event=application_started version=0.6" in messages
+    assert "event=application_started version=0.7" in messages
     assert "profile_id=basic_table_v1 profile_version=1.0" in messages
-    assert "event=application_stopped version=0.6" in messages
+    assert "event=application_stopped version=0.7" in messages
 
 
 def test_logger_does_not_duplicate_handlers():

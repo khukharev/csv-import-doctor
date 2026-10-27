@@ -40,7 +40,7 @@ def test_clean_report_schema():
     assert [c["id"] for c in body["checks"]] == list(CHECK_IDS)
     assert all(c["status"] == "passed" for c in body["checks"])
     assert body["schema_version"] == "1.0"
-    assert body["app_version"] == APP_VERSION == "0.6"
+    assert body["app_version"] == APP_VERSION == "0.7"
     assert UUID(body["request_id"]).version == 4
     assert datetime.fromisoformat(body["generated_at"]).utcoffset().total_seconds() == 0
     assert body["summary"] == {"error_count": 0, "warning_count": 0, "issue_count": 0,

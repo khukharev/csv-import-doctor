@@ -1,6 +1,6 @@
 # CSV Import Doctor
 
-Version **0.6**. Checks a CSV before import and produces a normalized copy with a
+Version **0.7**. Checks a CSV before import and produces a normalized copy with a
 full change log. The first record must be a header. Identifiers stay text; rows
 are never deleted, reordered or guessed. Only edge SPACE/TAB are trimmed.
 
@@ -48,5 +48,8 @@ Logs go to stderr as `key=value` lines with a `request_id` that matches the
 python -m pip install -r requirements-dev.txt
 python -m pytest -v
 ```
+
+GitHub Actions runs the same tests on every push and pull request and keeps
+a ZIP of the verified commit as a run artifact.
 
 `cleaned.csv` is not sanitized against spreadsheet formulas.

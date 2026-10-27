@@ -49,7 +49,7 @@ def test_valid_report_identity_and_seven_checks(client):
     assert response.status_code == 200
     report = response.json()
     assert report["valid"] is True
-    assert report["app_version"] == "0.6"
+    assert report["app_version"] == "0.7"
     assert report["request_id"] == response.headers["x-request-id"]
     assert UUID(report["request_id"]).version == 4
     assert [item["id"] for item in report["checks"]] == list(CHECK_IDS)
