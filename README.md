@@ -1,8 +1,10 @@
 # CSV Import Doctor
 
-Version **0.7**. Checks a CSV before import and produces a normalized copy with a
-full change log. The first record must be a header. Identifiers stay text; rows
-are never deleted, reordered or guessed. Only edge SPACE/TAB are trimmed.
+CSV Import Doctor is a local FastAPI service for checking CSV files before import into another application or data-processing pipeline. It detects structural problems, invalid headers, edge whitespace, missing or duplicate identifiers, duplicate rows, and numeric-looking identifiers that may lose information in spreadsheet software.
+
+The service can produce a normalized copy with before-and-after reports and a complete change log. It never guesses missing values, deletes or reorders rows, or converts identifiers to numbers. Normalization is limited to explicitly configured edge-whitespace trimming and output formatting. Input encoding and delimiter must be specified correctly; they are not detected automatically.
+
+CSV Import Doctor — сервис на FastAPI для проверки CSV перед импортом и создания нормализованной копии с отчётами до и после обработки и журналом изменений без удаления строк и преобразования идентификаторов в числа.
 
 ## Run
 
@@ -38,6 +40,28 @@ curl -F file=@examples/needs_trim.csv "http://127.0.0.1:8000/normalize?id_column
 `CSV_TRIM_NBSP` (`false`), `CSV_QUOTING` (`all` | `minimal`),
 `CSV_REPORT_VIEW` (`full` | `compact`). Process environment overrides `.env`.
 `APP_HOST`/`APP_PORT` are read by `run.sh`. Invalid values stop startup.
+
+## Health checks
+
+With the application running:
+
+```bash
+curl --fail-with-body http://127.0.0.1:8000/health
+curl --fail-with-body http://127.0.0.1:8000/version
+```
+
+Open http://127.0.0.1:8000/docs to upload a CSV and try the API.
+
+## Troubleshooting
+
+| Problem | What to check |
+|---|---|
+| `No module named ...` | Activate `.venv` and install the required dependencies. |
+| `Address already in use` | Stop the previous server or choose another port through `APP_PORT`. |
+| `DECODE_ERROR` | Select the correct `encoding`; encoding is not detected automatically. |
+| Unexpected column count | Select the correct `delimiter`. |
+| `NORMALIZATION_BLOCKED` | Read the returned report and correct the data errors before retrying. |
+| A downloaded file is not a ZIP | Check the HTTP status and response body; the server may have returned a JSON error. |
 
 ## Logs and tests
 
