@@ -176,3 +176,39 @@ def test_nbsp_process_overrides_dotenv_without_modifying_environment(tmp_path):
     assert load_settings(environ={}, env_file=env_file).csv_trim_nbsp is True
     assert load_settings(environ={"CSV_TRIM_NBSP": "false"}, env_file=env_file).csv_trim_nbsp is False
     assert dict(os.environ) == before
+
+
+def test_output_and_view_defaults():
+    settings = Settings()
+    assert (settings.csv_quoting, settings.csv_report_view) == ("all", "full")
+
+
+@pytest.mark.parametrize("key,attr,values", [
+    ("CSV_QUOTING", "csv_quoting", ("all", "minimal")),
+    ("CSV_REPORT_VIEW", "csv_report_view", ("full", "compact")),
+])
+def test_output_and_view_env_values(key, attr, values):
+    for text in values:
+        assert getattr(load_settings(environ={key: text}, read_env_file=False), attr) == text
+
+
+@pytest.mark.parametrize("key", ["CSV_QUOTING", "CSV_REPORT_VIEW"])
+@pytest.mark.parametrize("value", ["", "ALL", "Full", " all", "none", "1"])
+def test_output_and_view_invalid_env_fails(key, value):
+    with pytest.raises(ValueError, match=key):
+        load_settings(environ={key: value}, read_env_file=False)
+
+
+@pytest.mark.parametrize("kwargs", [{"csv_quoting": None}, {"csv_report_view": 1}])
+def test_output_and_view_direct_values_are_strict(kwargs):
+    with pytest.raises(ValueError):
+        Settings(**kwargs)
+
+
+def test_output_and_view_process_overrides_dotenv(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("CSV_QUOTING=minimal\nCSV_REPORT_VIEW=compact\n", encoding="utf-8")
+    from_file = load_settings(environ={}, env_file=env_file)
+    assert (from_file.csv_quoting, from_file.csv_report_view) == ("minimal", "compact")
+    overridden = load_settings(environ={"CSV_REPORT_VIEW": "full"}, env_file=env_file)
+    assert overridden.csv_report_view == "full"

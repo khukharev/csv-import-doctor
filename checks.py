@@ -263,7 +263,7 @@ def run_checks(
         "checks": checks, "issues": issues.details,
         "column_stats": None if prerequisite_failed else column_stats(rows, len(header)),
         "normalization": {
-            "implemented": False, "can_normalize": not blockers,
+            "implemented": True, "can_normalize": not blockers,
             "blockers": blockers, "changed_headers": changed_headers,
             "changed_cells": changed_cells, "total_changes": changes,
             "change_limit": MAX_CHANGES,
@@ -271,11 +271,11 @@ def run_checks(
     }
 
 
-def inspect_csv(
+def read_and_check(
     raw: bytes, *, options: CSVOptions | None = None, id_column: str | None = None,
     settings: Settings | None = None, profile: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """One entry point for future HTTP: raw bytes in, report or DoctorError out."""
+) -> tuple[CSVTable, dict[str, Any], Settings, dict[str, Any]]:
+    """Shared entry for inspection and normalization: validate, read, check."""
     settings = Settings() if settings is None else settings
     profile = load_profile() if profile is None else validate_profile(profile)
     _validate_id_column(id_column, settings.csv_trim_nbsp)
@@ -285,7 +285,18 @@ def inspect_csv(
             or options.delimiter not in profile["allowed_delimiters"]):
         raise DoctorError("INVALID_OPTIONS", "The selected format is not allowed by the profile.")
     table = read_csv(raw, options=options, settings=settings)
-    return run_checks(table, id_column=id_column, settings=settings, profile=profile)
+    report = run_checks(table, id_column=id_column, settings=settings, profile=profile)
+    return table, report, settings, profile
+
+
+def inspect_csv(
+    raw: bytes, *, options: CSVOptions | None = None, id_column: str | None = None,
+    settings: Settings | None = None, profile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Raw bytes in, full report or DoctorError out. Never changes the input."""
+    return read_and_check(
+        raw, options=options, id_column=id_column, settings=settings, profile=profile,
+    )[1]
 
 
 def main(argv: list[str] | None = None) -> int:

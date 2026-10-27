@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from checks import inspect_csv
@@ -18,17 +18,22 @@ from config import (
     MAX_HEADER_LENGTH, MAX_ISSUE_DETAILS, Settings, load_settings,
 )
 from csv_profile import IMPLEMENTED_CHECK_IDS, ProfileError, load_profile
+from normalize import NormalizationBlocked, NormalizationInvariantError, normalize_csv
+from report_views import apply_report_view
 
 LOGGER = logging.getLogger("csv_import_doctor")
 LIMIT_ERROR_CODES = frozenset({
     "FILE_TOO_LARGE", "ROW_LIMIT_EXCEEDED", "COLUMN_LIMIT_EXCEEDED",
-    "FIELD_LIMIT_EXCEEDED", "CHANGE_LIMIT_EXCEEDED",
+    "FIELD_LIMIT_EXCEEDED", "CHANGE_LIMIT_EXCEEDED", "OUTPUT_TOO_LARGE",
 })
+ARCHIVE_NAME = "csv-import-doctor-result.zip"
+ReportView = Literal["full", "compact"]
 
 
 def error_response(
     request: Request, status: int, code: str, message: str,
     *, details: dict[str, Any] | None = None, headers: dict[str, str] | None = None,
+    report: dict[str, Any] | None = None,
 ) -> JSONResponse:
     """Return safe metadata, never raw validation inputs or exception text."""
     request_id = request.state.request_id
@@ -40,7 +45,7 @@ def error_response(
         status_code=status,
         content={"error": {
             "code": code, "message": message, "request_id": request_id,
-            "report": None, "details": {} if details is None else details,
+            "report": report, "details": {} if details is None else details,
         }},
         headers=headers,
     )
@@ -97,9 +102,8 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
         title="CSV Import Doctor",
         version=APP_VERSION,
         description=(
-            "Development version 0.5: inspect CSV files through POST /inspect "
-            "or the local CLI. Inspection is read-only. "
-            "Normalization and corrected downloads are not implemented yet."
+            "Inspect CSV files with POST /inspect (read-only) and get a normalized "
+            "copy with a full change log from POST /normalize (ZIP)."
         ),
         lifespan=lifespan,
         redoc_url=None,
@@ -146,6 +150,28 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
         code = "INVALID_REQUEST" if exc.code == "INVALID_OPTIONS" else exc.code
         return error_response(request, status, code, exc.message, details=exc.details)
 
+    @application.exception_handler(NormalizationBlocked)
+    async def normalization_blocked(request: Request, exc: NormalizationBlocked) -> JSONResponse:
+        view = request.query_params.get("report_view") or request.app.state.settings.csv_report_view
+        return error_response(
+            request, 409, "NORMALIZATION_BLOCKED",
+            "The CSV has data errors; fix them and upload it again.",
+            details={"blockers": list(exc.report["normalization"]["blockers"])},
+            report=apply_report_view(exc.report, view),
+        )
+
+    @application.exception_handler(NormalizationInvariantError)
+    async def normalization_failed(request: Request, exc: NormalizationInvariantError) -> JSONResponse:
+        # The reason names a safety check, never cell values.
+        LOGGER.error(
+            "event=normalization_invariant_failed request_id=%s reason=%s",
+            request.state.request_id, exc,
+        )
+        return error_response(
+            request, 500, "INTERNAL_NORMALIZATION_ERROR",
+            "The normalized result failed a safety check; no file was produced.",
+        )
+
     @application.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
         # Do not serialize exc.errors(): it includes untrusted inputs and filenames.
@@ -188,7 +214,9 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
             "implemented_check_ids": list(IMPLEMENTED_CHECK_IDS),
             "effective_settings": {
                 "trim_nbsp": request.app.state.settings.csv_trim_nbsp,
-                "normalization_implemented": False,
+                "normalization_implemented": True,
+                "output_quoting": request.app.state.settings.csv_quoting,
+                "report_view": request.app.state.settings.csv_report_view,
             },
             "limits": {
                 "max_bytes": request.app.state.settings.csv_max_bytes,
@@ -229,6 +257,9 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
             min_length=1, max_length=MAX_HEADER_LENGTH,
             description="Exact header after configured trim; omit to skip ID checks.",
         )] = None,
+        report_view: Annotated[ReportView | None, Query(
+            description="full or compact; omit to use CSV_REPORT_VIEW.",
+        )] = None,
     ) -> dict[str, Any]:
         current = request.app.state.settings
         profile = request.app.state.profile
@@ -255,7 +286,68 @@ def create_app(settings: Settings | None = None, profile_path: Path | None = Non
             report["table"]["column_count"], report["summary"]["error_count"],
             report["summary"]["warning_count"], report["valid"],
         )
-        return report
+        return apply_report_view(report, report_view or current.csv_report_view)
+
+    @application.post(
+        "/normalize", summary="Normalize a CSV and download a ZIP",
+        description=(
+            "Upload a CSV in multipart field 'file'. On success returns a ZIP with "
+            "cleaned.csv (UTF-8, comma, LF), report.json (full reports before and after) "
+            "and changes.json (every changed value). Only edge SPACE/TAB are trimmed "
+            "(NBSP only if CSV_TRIM_NBSP=true). Rows are never deleted or reordered. "
+            "report_view only affects the report inside a 409 error."
+        ),
+        response_class=Response,
+        responses={
+            200: {"content": {"application/zip": {}}, "description": "Result archive"},
+            400: {"description": "Malformed multipart request"},
+            409: {"description": "Data errors block normalization; report included"},
+            413: {"description": "Input, change or output limit exceeded"},
+            422: {"description": "Invalid request or unreadable CSV"},
+            500: {"description": "Internal or safety-check failure; no file returned"},
+        },
+    )
+    def normalize_upload(
+        request: Request,
+        file: Annotated[UploadFile, File(description="CSV bytes; filename and MIME type are not trusted.")],
+        encoding: Annotated[Literal["utf-8", "cp1251"] | None, Query(
+            description="Omit to use the profile default; never guessed.",
+        )] = None,
+        delimiter: Annotated[Literal["comma", "semicolon", "tab"] | None, Query(
+            description="Omit to use the profile default; never guessed.",
+        )] = None,
+        id_column: Annotated[str | None, Query(
+            min_length=1, max_length=MAX_HEADER_LENGTH,
+            description="Exact header after configured trim; omit to skip ID checks.",
+        )] = None,
+        report_view: Annotated[ReportView | None, Query(
+            description="View of the report in a 409 error; the ZIP always has full reports.",
+        )] = None,
+    ) -> Response:
+        current = request.app.state.settings
+        profile = request.app.state.profile
+        try:
+            raw = file.file.read(current.csv_max_bytes + 1)
+            result = normalize_csv(
+                raw,
+                options=CSVOptions(
+                    encoding=encoding if encoding is not None else profile["defaults"]["encoding"],
+                    delimiter=delimiter if delimiter is not None else profile["defaults"]["delimiter"],
+                ),
+                id_column=id_column, settings=current, profile=profile,
+                request_id=request.state.request_id,
+            )
+        finally:
+            file.file.close()
+        LOGGER.info(
+            "event=normalization_completed request_id=%s rows=%s changes=%s output_bytes=%s",
+            request.state.request_id, result.before["table"]["row_count"],
+            result.changes["summary"]["total_changes"], len(result.cleaned),
+        )
+        return Response(
+            content=result.archive, media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{ARCHIVE_NAME}"'},
+        )
 
     return application
 

@@ -1,4 +1,4 @@
-"""HTTP contract and privacy tests for version 0.5; no real user data."""
+"""HTTP contract and privacy tests for POST /inspect; no real user data."""
 
 import json
 import logging
@@ -16,7 +16,7 @@ from config import MAX_COLUMNS, MAX_FIELD_LENGTH, MAX_ISSUE_DETAILS, Settings
 from csv_core import CSVOptions
 from csv_profile import CHECK_IDS, load_profile
 
-EXAMPLES = Path(__file__).resolve().parent / "examples"
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
 
 @pytest.fixture
@@ -49,11 +49,11 @@ def test_valid_report_identity_and_seven_checks(client):
     assert response.status_code == 200
     report = response.json()
     assert report["valid"] is True
-    assert report["app_version"] == "0.5"
+    assert report["app_version"] == "0.6"
     assert report["request_id"] == response.headers["x-request-id"]
     assert UUID(report["request_id"]).version == 4
     assert [item["id"] for item in report["checks"]] == list(CHECK_IDS)
-    assert report["normalization"]["implemented"] is False
+    assert report["normalization"]["implemented"] is True
     assert report["source"]["size_bytes"] == len(b"id,name\nA,Alice\n")
 
 
@@ -193,7 +193,9 @@ def test_profile_reports_effective_limits(client):
     body = client.get("/profile").json()
     assert body["limits"]["max_bytes"] == Settings().csv_max_bytes
     assert body["limits"]["max_issue_details"] == MAX_ISSUE_DETAILS
-    assert body["effective_settings"]["normalization_implemented"] is False
+    assert body["effective_settings"]["normalization_implemented"] is True
+    assert body["effective_settings"]["output_quoting"] == "all"
+    assert body["effective_settings"]["report_view"] == "full"
 
 
 def test_filename_and_mime_are_not_used(client):
@@ -218,7 +220,7 @@ def test_server_generates_distinct_ids(client):
 @pytest.mark.parametrize("method,path,status,code", [
     ("get", "/inspect", 405, "METHOD_NOT_ALLOWED"),
     ("post", "/health", 405, "METHOD_NOT_ALLOWED"),
-    ("post", "/normalize", 404, "NOT_FOUND"),
+    ("get", "/normalize", 405, "METHOD_NOT_ALLOWED"),
     ("get", "/not-found", 404, "NOT_FOUND"),
 ])
 def test_http_errors_share_format(client, method, path, status, code):
@@ -289,7 +291,7 @@ def test_openapi_file_query_and_error_documentation(client):
     operation = client.get("/openapi.json").json()["paths"]["/inspect"]["post"]
     assert operation["requestBody"]["required"] is True
     assert "multipart/form-data" in operation["requestBody"]["content"]
-    assert {p["name"] for p in operation["parameters"]} == {"encoding", "delimiter", "id_column"}
+    assert {p["name"] for p in operation["parameters"]} == {"encoding", "delimiter", "id_column", "report_view"}
     assert all(p["in"] == "query" for p in operation["parameters"])
     assert {"200", "400", "413", "422", "500"} <= set(operation["responses"])
 
@@ -314,7 +316,7 @@ def test_id_in_form_body_is_not_a_query_parameter(client):
     assert response.json()["checks"][4]["reason"] == "ID_COLUMN_NOT_CONFIGURED"
 
 
-def test_change_limit_only_blocks_future_normalization(client):
+def test_change_limit_does_not_block_inspection(client):
     # 6k rows x 2 cells = 12k changes, still inside the inspection row/byte caps.
     raw = b"a,b\n" + b" x , y \n" * 6000
     response = upload(client, raw)

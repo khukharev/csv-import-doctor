@@ -19,7 +19,7 @@ from config import APP_VERSION, MAX_ISSUE_DETAILS, Settings
 from csv_core import CSVOptions, DoctorError, read_csv
 from csv_profile import CHECK_IDS, load_profile
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def report(text, *, id_column=None, nbsp=False):
@@ -40,13 +40,13 @@ def test_clean_report_schema():
     assert [c["id"] for c in body["checks"]] == list(CHECK_IDS)
     assert all(c["status"] == "passed" for c in body["checks"])
     assert body["schema_version"] == "1.0"
-    assert body["app_version"] == APP_VERSION == "0.5"
+    assert body["app_version"] == APP_VERSION == "0.6"
     assert UUID(body["request_id"]).version == 4
     assert datetime.fromisoformat(body["generated_at"]).utcoffset().total_seconds() == 0
     assert body["summary"] == {"error_count": 0, "warning_count": 0, "issue_count": 0,
                                "shown_issue_count": 0, "omitted_issue_count": 0}
     assert body["normalization"]["can_normalize"] is True
-    assert body["normalization"]["implemented"] is False
+    assert body["normalization"]["implemented"] is True
     assert body["table"]["row_count"] == 2
     assert json.loads(json.dumps(body, ensure_ascii=False)) == body
 

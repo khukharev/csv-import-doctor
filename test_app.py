@@ -36,7 +36,7 @@ def test_version(client):
         "profile_id": "basic_table_v1",
         "profile_version": "1.0",
     }
-    assert APP_VERSION == "0.5"
+    assert APP_VERSION == "0.6"
 
 
 def test_profile_endpoint(client):
@@ -66,7 +66,7 @@ def test_docs(client):
 
 def test_openapi_contains_only_current_routes(client):
     schema = client.get("/openapi.json").json()
-    assert set(schema["paths"]) == {"/health", "/version", "/profile", "/inspect"}
+    assert set(schema["paths"]) == {"/health", "/version", "/profile", "/inspect", "/normalize"}
     assert schema["info"]["version"] == APP_VERSION
 
 
@@ -86,9 +86,10 @@ def test_health_method_is_get_only(client):
     assert client.post("/health").status_code == 405
 
 
-def test_missing_route_and_future_routes_return_404(client):
-    for path in ("/", "/normalize", "/missing"):
+def test_missing_routes_return_404_and_normalize_is_post_only(client):
+    for path in ("/", "/missing"):
         assert client.get(path).status_code == 404
+    assert client.get("/normalize").status_code == 405
 
 
 def test_request_headers_and_unique_server_ids(client):
@@ -119,9 +120,9 @@ def test_startup_and_shutdown_are_logged(caplog):
         with TestClient(create_app(Settings())) as client:
             assert client.get("/health").status_code == 200
     messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "event=application_started version=0.5" in messages
+    assert "event=application_started version=0.6" in messages
     assert "profile_id=basic_table_v1 profile_version=1.0" in messages
-    assert "event=application_stopped version=0.5" in messages
+    assert "event=application_stopped version=0.6" in messages
 
 
 def test_logger_does_not_duplicate_handlers():

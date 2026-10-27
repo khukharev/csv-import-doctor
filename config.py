@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-APP_VERSION = "0.5"
+APP_VERSION = "0.6"
 REPORT_SCHEMA_VERSION = "1.0"
 MAX_HEADER_LENGTH = 128
 MAX_ISSUE_DETAILS = 1_000
@@ -15,12 +15,16 @@ PROFILE_PATH = PROJECT_ROOT / "profile.json"
 DEFAULT_MAX_BYTES = 2 * 1024 * 1024
 DEFAULT_MAX_ROWS = 10_000
 MAX_ALLOWED_BYTES = 8 * 1024 * 1024
+# Normalized output may grow (quotes, UTF-8); it has its own fixed cap.
+MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 MAX_ALLOWED_ROWS = 50_000
 MAX_COLUMNS = 200
 MAX_FIELD_LENGTH = 10_000
 DEFAULT_NAME = "CSV Import Doctor"
 DEFAULT_AUTHOR = "Student"
 ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR"}
+QUOTING_MODES = ("all", "minimal")
+REPORT_VIEWS = ("full", "compact")
 
 
 @dataclass(frozen=True)
@@ -31,10 +35,16 @@ class Settings:
     csv_max_bytes: int = DEFAULT_MAX_BYTES
     csv_max_rows: int = DEFAULT_MAX_ROWS
     csv_trim_nbsp: bool = False
+    csv_quoting: str = "all"
+    csv_report_view: str = "full"
 
     def __post_init__(self) -> None:
         if type(self.csv_trim_nbsp) is not bool:
             raise ValueError("CSV_TRIM_NBSP: must be true or false")
+        if self.csv_quoting not in QUOTING_MODES:
+            raise ValueError("CSV_QUOTING: allowed values are all, minimal")
+        if self.csv_report_view not in REPORT_VIEWS:
+            raise ValueError("CSV_REPORT_VIEW: allowed values are full, compact")
         for key, value in (
             ("APP_NAME", self.app_name),
             ("APP_AUTHOR", self.app_author),
@@ -104,4 +114,6 @@ def load_settings(
         csv_max_bytes=integer("CSV_MAX_BYTES", DEFAULT_MAX_BYTES),
         csv_max_rows=integer("CSV_MAX_ROWS", DEFAULT_MAX_ROWS),
         csv_trim_nbsp=boolean("CSV_TRIM_NBSP", False),
+        csv_quoting=value("CSV_QUOTING", "all"),
+        csv_report_view=value("CSV_REPORT_VIEW", "full"),
     )

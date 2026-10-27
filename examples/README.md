@@ -37,5 +37,8 @@ Without `--id-column`, C05/C07 are skipped; duplicate_rows.csv is valid with one
 C06 warning and exit 0. With `CSV_TRIM_NBSP=true`, nbsp_edges.csv has one planned
 cell change and one additional C04 warning. No fixture is changed on disk.
 
+Over HTTP, `POST /normalize` returns a ZIP for every fixture without errors and
+409 for the others; broken_quotes.csv gives 422.
+
 The parser-only CLI remains available. `python -m csv_core examples/bad_width.csv`
 still exits 0: parsing is not validation. Use `python -m checks` for checks.

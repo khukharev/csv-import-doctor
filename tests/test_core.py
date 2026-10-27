@@ -11,7 +11,7 @@ import csv_core
 from config import MAX_COLUMNS, MAX_FIELD_LENGTH, Settings
 from csv_core import CSVOptions, DoctorError, decode, main, parse, read_csv
 
-EXAMPLES = Path(__file__).resolve().parent / "examples"
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
 
 @pytest.fixture(autouse=True)
